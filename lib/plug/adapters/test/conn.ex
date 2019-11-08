@@ -13,7 +13,7 @@ defmodule Plug.Adapters.Test.Conn do
     owner = self()
 
     {body, body_params, params, req_headers} =
-      body_or_params(body_or_params, query, conn.req_headers)
+      body_or_params(method, body_or_params, query, conn.req_headers)
 
     state = %{
       method: method,
@@ -135,6 +135,36 @@ defmodule Plug.Adapters.Test.Conn do
     end
   end
 
+  defp body_or_params("GET", nil, _query, headers) do
+    {"", nil, nil, headers}
+  end
+
+  defp body_or_params("GET", params, query, headers) when is_list(params) do
+    body_or_params("GET", Enum.into(params, %{}), query, headers)
+  end
+
+  defp body_or_params("GET", params, query, headers) when is_map(params) do
+    other_params = stringify_pairs(params)
+    params = Map.merge(Plug.Conn.Query.decode(query), other_params)
+    {"", nil, params, headers}
+  end
+
+  defp body_or_params(_method, body_or_params, query, headers) do
+    body_or_params(body_or_params, query, headers)
+  end
+
+  defp stringify_pairs([{_, _} | _] = params), do: Enum.into(params, %{}, &stringify_pair/1)
+  defp stringify_pairs([_ | _] = params), do: Enum.map(params, &stringify_pairs/1)
+
+  defp stringify_pairs(%{__struct__: mod} = struct) when is_atom(mod),
+    do: Enum.into(Map.from_struct(struct), %{}, &stringify_pair/1)
+
+  defp stringify_pairs(%{} = params), do: Enum.into(params, %{}, &stringify_pair/1)
+  defp stringify_pairs(value) when is_integer(value) or is_atom(value), do: to_string(value)
+  defp stringify_pairs(other), do: other
+
+  defp stringify_pair({k, v}), do: {to_string(k), stringify_pairs(v)}
+
   defp body_or_params(nil, _query, headers), do: {"", nil, nil, headers}
 
   defp body_or_params(body, _query, headers) when is_binary(body) do
@@ -159,7 +189,6 @@ defmodule Plug.Adapters.Test.Conn do
   defp stringify_params([_ | _] = params), do: Enum.map(params, &stringify_params/1)
   defp stringify_params(%{__struct__: mod} = struct) when is_atom(mod), do: struct
   defp stringify_params(%{} = params), do: Enum.into(params, %{}, &stringify_kv/1)
-  defp stringify_params(value) when is_integer(value) or is_atom(value), do: to_string(value)
   defp stringify_params(other), do: other
 
   defp stringify_kv({k, v}), do: {to_string(k), stringify_params(v)}

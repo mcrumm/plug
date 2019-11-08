@@ -14,50 +14,83 @@ defmodule Plug.Adapters.Test.ConnTest do
     assert {:ok, "", _state} = adapter.read_req_body(state, length: 5)
   end
 
+  describe "GET requests" do
+    test "custom params" do
+      conn = conn(:get, "/", a: "b", c: [%{d: "e"}])
+      assert conn.body_params == %Plug.Conn.Unfetched{aspect: :body_params}
+      assert conn.params == %{"a" => "b", "c" => [%{"d" => "e"}]}
+
+      conn = conn(:get, "/", a: "b", c: [d: "e", f: 1, g: :foo], h: 2, i: :bar)
+      assert conn.body_params == %Plug.Conn.Unfetched{aspect: :body_params}
+
+      assert conn.params == %{
+               "a" => "b",
+               "c" => %{"d" => "e", "f" => "1", "g" => "foo"},
+               "h" => "2",
+               "i" => "bar"
+             }
+    end
+
+    test "structs are converted" do
+      conn = conn(:get, "/", a: "b", file: %Plug.Upload{})
+      assert conn.body_params == %Plug.Conn.Unfetched{aspect: :body_params}
+
+      assert conn.params == %{
+               "a" => "b",
+               "file" => %{
+                 "content_type" => "",
+                 "filename" => "",
+                 "path" => ""
+               }
+             }
+
+      conn = conn(:get, "/", a: "b", file: %{__struct__: "Foo"})
+      assert conn.body_params == %Plug.Conn.Unfetched{aspect: :body_params}
+      assert conn.params == %{"a" => "b", "file" => %{"__struct__" => "Foo"}}
+    end
+
+    test "content type is not modified" do
+      conn = conn(:get, "/", foo: "bar")
+      assert conn.req_headers == []
+
+      conn =
+        conn(:get, "/", foo: "bar")
+        |> Plug.Conn.put_req_header("content-type", "application/vnd.api+json")
+        |> Plug.Adapters.Test.Conn.conn(:get, "/", foo: "bar")
+
+      assert conn.req_headers == [{"content-type", "application/vnd.api+json"}]
+    end
+  end
+
   test "custom params" do
-    conn = conn(:get, "/", a: "b", c: [%{d: "e"}])
-    assert conn.body_params == %{"a" => "b", "c" => [%{"d" => "e"}]}
-    assert conn.params == %{"a" => "b", "c" => [%{"d" => "e"}]}
-
-    conn = conn(:get, "/", a: "b", c: [d: "e", f: 1, g: :foo], h: 2, i: :bar)
-
-    assert conn.body_params == %{
-             "a" => "b",
-             "c" => %{"d" => "e", "f" => "1", "g" => "foo"},
-             "h" => "2",
-             "i" => "bar"
-           }
-
-    assert conn.params == %{
-             "a" => "b",
-             "c" => %{"d" => "e", "f" => "1", "g" => "foo"},
-             "h" => "2",
-             "i" => "bar"
-           }
-
     conn = conn(:post, "/?foo=bar", %{foo: "baz"})
     assert conn.body_params == %{"foo" => "baz"}
     assert conn.params == %{"foo" => "baz"}
 
-    conn = conn(:post, "/?foo=bar", %{biz: "baz"})
-    assert conn.body_params == %{"biz" => "baz"}
-    assert conn.params == %{"foo" => "bar", "biz" => "baz"}
+    conn = conn(:post, "/?foo=bar", %{biz: "baz", rule: 42})
+    assert conn.body_params == %{"biz" => "baz", "rule" => 42}
+    assert conn.params == %{"foo" => "bar", "biz" => "baz", "rule" => 42}
   end
 
   test "custom struct params" do
-    conn = conn(:get, "/", a: "b", file: %Plug.Upload{})
+    conn = conn(:post, "/", a: "b", file: %Plug.Upload{})
 
     assert conn.params == %{
              "a" => "b",
              "file" => %Plug.Upload{content_type: nil, filename: nil, path: nil}
            }
 
-    conn = conn(:get, "/", a: "b", file: %{__struct__: "Foo"})
+    conn = conn(:post, "/", a: "b", file: %{__struct__: "Foo"})
     assert conn.params == %{"a" => "b", "file" => %{"__struct__" => "Foo"}}
   end
 
   test "no body or params" do
     conn = conn(:get, "/")
+    {adapter, state} = conn.adapter
+    assert conn.req_headers == []
+    assert {:ok, "", _state} = adapter.read_req_body(state, length: 10)
+
+    conn = conn(:post, "/")
     {adapter, state} = conn.adapter
     assert conn.req_headers == []
     assert {:ok, "", _state} = adapter.read_req_body(state, length: 10)
@@ -69,15 +102,15 @@ defmodule Plug.Adapters.Test.ConnTest do
   end
 
   test "custom params sets content-type to multipart/mixed when content-type is not set" do
-    conn = conn(:get, "/", foo: "bar")
+    conn = conn(:post, "/", foo: "bar")
     assert conn.req_headers == [{"content-type", "multipart/mixed; boundary=plug_conn_test"}]
   end
 
   test "custom params does not change content-type when set" do
     conn =
-      conn(:get, "/", foo: "bar")
+      conn(:post, "/", foo: "bar")
       |> Plug.Conn.put_req_header("content-type", "application/vnd.api+json")
-      |> Plug.Adapters.Test.Conn.conn(:get, "/", foo: "bar")
+      |> Plug.Adapters.Test.Conn.conn(:post, "/", foo: "bar")
 
     assert conn.req_headers == [{"content-type", "application/vnd.api+json"}]
   end
