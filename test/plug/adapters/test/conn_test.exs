@@ -19,9 +19,21 @@ defmodule Plug.Adapters.Test.ConnTest do
     assert conn.body_params == %{"a" => "b", "c" => [%{"d" => "e"}]}
     assert conn.params == %{"a" => "b", "c" => [%{"d" => "e"}]}
 
-    conn = conn(:get, "/", a: "b", c: [d: "e"])
-    assert conn.body_params == %{"a" => "b", "c" => %{"d" => "e"}}
-    assert conn.params == %{"a" => "b", "c" => %{"d" => "e"}}
+    conn = conn(:get, "/", a: "b", c: [d: "e", f: 1, g: :foo], h: 2, i: :bar)
+
+    assert conn.body_params == %{
+             "a" => "b",
+             "c" => %{"d" => "e", "f" => "1", "g" => "foo"},
+             "h" => "2",
+             "i" => "bar"
+           }
+
+    assert conn.params == %{
+             "a" => "b",
+             "c" => %{"d" => "e", "f" => "1", "g" => "foo"},
+             "h" => "2",
+             "i" => "bar"
+           }
 
     conn = conn(:post, "/?foo=bar", %{foo: "baz"})
     assert conn.body_params == %{"foo" => "baz"}

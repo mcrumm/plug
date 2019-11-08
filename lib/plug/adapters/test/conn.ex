@@ -159,6 +159,7 @@ defmodule Plug.Adapters.Test.Conn do
   defp stringify_params([_ | _] = params), do: Enum.map(params, &stringify_params/1)
   defp stringify_params(%{__struct__: mod} = struct) when is_atom(mod), do: struct
   defp stringify_params(%{} = params), do: Enum.into(params, %{}, &stringify_kv/1)
+  defp stringify_params(value) when is_integer(value) or is_atom(value), do: to_string(value)
   defp stringify_params(other), do: other
 
   defp stringify_kv({k, v}), do: {to_string(k), stringify_params(v)}
